@@ -1,0 +1,41 @@
+- name: Clean up the sandbox
+  hosts: local
+  connection: local
+  become: False
+  gather_facts: False
+  vars:
+    bucket_name: my-bucket
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Termiante instances
+      ec2_instance:
+        aws_access_key: "{{ aws_access }}"
+        aws_secret_key: "{{ aws_secret }}"
+        state: absent
+        region: "{{ region }}"
+        filters:
+          instance.group-name: "{{ security_group }}"
+
+    - name: Delete the role
+      iam_role:
+        aws_access_key: "{{ aws_access }}"
+        aws_secret_key: "{{ aws_secret }}"
+        name: ec2_s3_access
+        state: absent
+    
+    - name: Delete security group by its id
+      ec2_group:
+        aws_access_key: "{{ aws_access }}"
+        aws_secret_key: "{{ aws_secret }}"
+        region: "{{ region }}"
+        name: "{{ security_group }}"
+        state: absent
+
+    - name: Remove s3 bucket
+      aws_s3:
+        bucket: "{{ bucket_name }}"
+        mode: delete
+        aws_access_key: "{{ aws_access }}"
+        aws_secret_key: "{{ aws_secret }}"

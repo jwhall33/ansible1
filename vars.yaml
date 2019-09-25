@@ -1,0 +1,11 @@
+---
+# all over variables
+keypair: CHANGE
+instance_type: t2.micro
+security_group: my_securitygroup
+region: us-east-1
+vpc_id: CHANGE
+vpc_subnet: CHANGE
+iam_profile: ec2_s3_access
+aws_access: CHANGE
+aws_secret: CHANGE

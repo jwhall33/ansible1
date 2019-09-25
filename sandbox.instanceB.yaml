@@ -1,0 +1,118 @@
+- name: Create sandbox Instance B
+  hosts: local
+  remote_user: ubuntu
+  connection: local
+  become: False
+  gather_facts: False
+  vars:
+    image: ami-05a36d3b9aa4a17ac
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Launch EC2 Instance B
+      ec2:
+        aws_access_key: "{{ aws_access }}"
+        aws_secret_key: "{{ aws_secret }}"
+        key_name: "{{ keypair }}"
+        group: "{{ security_group }}"
+        instance_type: "{{ instance_type }}"
+        image: "{{ image }}"
+        wait: true
+        region: "{{ region }}"
+        vpc_subnet_id: "{{ vpc_subnet }}"
+        assign_public_ip: yes
+        instance_profile_name: "{{ iam_profile }}"
+        volumes:
+        - device_name: /dev/xvdc
+          volume_type: gp2
+          volume_size: 1
+          delete_on_termination: true
+          region: "{{ region }}"
+          encrypted: true
+        - device_name: /dev/xvdd
+          volume_type: gp2
+          volume_size: 1
+          delete_on_termination: true
+          region: "{{ region }}"
+          encrypted: true
+        instance_tags:
+          Name: Instance-B
+      register: ec2b
+
+    - name: Wait for SSH to come up on Instance B
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
+
+    - name: Update and upgrade apt packages
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: true
+      apt:
+        upgrade: yes
+        update_cache: yes
+
+    - name: Install packages
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: yes
+      apt: 
+        name: "{{ packages }}"
+        state: present
+      vars:
+        packages:
+        - xfsprogs
+        - mdadm
+        - awscli
+    
+    - name: Run MDADM
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: yes
+      command: mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/xvdc /dev/xvdd
+
+    - name: Format to RAID
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: yes
+      filesystem:
+        fstype: xfs
+        dev: /dev/md0
+
+    - name: Giddy Up
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: yes
+      mount:
+        path: /datadown
+        src:  /dev/md0
+        fstype: xfs
+        state: mounted
+
+    - name: Update mdadm config
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: yes
+      shell: mdadm --detail --scan | sudo tee -a /etc/mdadm/mdadm.conf
+    
+    - name: Make array available early in boot process
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: yes
+      command: "update-initramfs -u"    
+    
+    - name: per instructions; reboot
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: yes
+      reboot:
+
+    - name: Wait again for SSH to come up on Instance B
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      wait_for_connection:
+        delay: 30
+        timeout: 320      
+
+    - name: Pull it to S3
+      delegate_to: "{{ ec2b.instances[0].public_dns_name }}"
+      become: yes    
+      shell: aws s3 cp --region us-east-1 s3://my-bucket/google.html google.html
+      args:
+        chdir: /datadown
+
+
+

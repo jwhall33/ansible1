@@ -1,0 +1,21 @@
+- name: Create a sandbox security group
+  hosts: local
+  connection: local
+  become: False
+  gather_facts: False
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Create a role with description
+      iam_role:
+        aws_access_key: "{{ aws_access }}"
+        aws_secret_key: "{{ aws_secret }}"
+        name: ec2_s3_access
+        assume_role_policy_document: "{{ lookup('file','iam_policy.json') }}"
+        managed_policy: arn:aws:iam::aws:policy/AmazonS3FullAccess
+        description: EC2 access S3
+        state: present
+
+
+

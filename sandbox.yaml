@@ -1,0 +1,8 @@
+# homework
+---
+  - import_playbook: sandbox.S3.yaml
+  - import_playbook: sandbox.IAM.yaml
+  - import_playbook: sandbox.SG.yaml
+  - import_playbook: sandbox.instanceA.yaml
+  - import_playbook: sandbox.instanceB.yaml
+

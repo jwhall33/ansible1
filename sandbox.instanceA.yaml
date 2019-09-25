@@ -1,0 +1,101 @@
+- name: Create sandbox Instance A
+  hosts: local
+  connection: local
+  remote_user: ec2-user
+  become: False
+  gather_facts: False
+  vars:
+    image: ami-0080e4c5bc078760e
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Launch EC2 Instance A
+      ec2:
+        aws_access_key: "{{ aws_access }}"
+        aws_secret_key: "{{ aws_secret }}"
+        key_name: "{{ keypair }}"
+        group: "{{ security_group }}"
+        instance_type: "{{ instance_type }}"
+        image: "{{ image }}"
+        wait: true
+        region: "{{ region }}"
+        vpc_subnet_id: "{{ vpc_subnet }}"
+        assign_public_ip: yes
+        instance_profile_name: "{{ iam_profile }}"
+        volumes:
+        - device_name: /dev/xvda
+          volume_type: gp2
+          volume_size: 9
+          delete_on_termination: true
+        - device_name: /dev/xvdb
+          volume_type: gp2
+          volume_size: 1
+          delete_on_termination: true
+          region: "{{ region }}"
+        instance_tags:
+          Name: Instance-A
+      register: ec2a
+
+    - name: Wait for SSH to come up on Instance A
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
+      
+    
+    - name: Install XFS
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      become: yes
+      yum: 
+        name: xfsprogs 
+        state: installed
+
+    - name: Add EBS to Instance A
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      become: yes
+      filesystem:
+        fstype: xfs
+        dev: /dev/xvdb
+    
+    - name: Create a directory if it does not exist
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      become: yes
+      file:
+        path: /dataup
+        state: directory
+        mode: 'a+w'
+
+    - name: Giddy Up
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      become: yes
+      mount:
+        path: /dataup
+        src:  /dev/xvdb
+        fstype: xfs
+        state: mounted
+    
+    - name: per instructions; reboot
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      become: yes
+      reboot:
+
+    - name: Wait again for SSH to come up on Instance A
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
+    
+    - name: Create a file
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      become: yes
+      shell: curl https://www.google.com >> google.html
+      args:
+        chdir: /dataup
+
+    - name: Move it to S3
+      delegate_to: "{{ ec2a.instances[0].public_dns_name }}"
+      become: yes
+      command: aws s3 cp google.html s3://my-bucket/google.html --sse
+      args:
+        chdir: /dataup
